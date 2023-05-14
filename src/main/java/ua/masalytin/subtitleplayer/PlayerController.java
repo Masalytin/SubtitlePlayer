@@ -1,14 +1,20 @@
 package ua.masalytin.subtitleplayer;
 
 import javafx.application.Platform;
+import javafx.beans.Observable;
 import javafx.event.ActionEvent;
 import javafx.fxml.FXML;
+import javafx.geometry.Pos;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
 import javafx.scene.control.Slider;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
 import javafx.scene.input.MouseEvent;
+import javafx.scene.text.Font;
+import javafx.scene.text.Text;
+import javafx.scene.text.TextAlignment;
+import javafx.scene.text.TextFlow;
 import javafx.stage.FileChooser;
 import javafx.stage.Stage;
 
@@ -17,8 +23,8 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
-import java.util.Queue;
-import java.util.concurrent.LinkedBlockingQueue;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -38,60 +44,62 @@ public class PlayerController {
     private volatile Slider slider;
 
     @FXML
-    private volatile Label startLabel;
-
+    private volatile TextFlow textFlow;
+    
     @FXML
-    private volatile Label textLabel;
+    private volatile Label timeLabel;
+
     private static final Image PLAY_BUTTON_IMAGE = new Image(PlayerController.class.getResourceAsStream("/icons/play.png"));
-    private static final Image STOP_BUTTON_IMAGE = new Image(PlayerController.class.getResourceAsStream("/icons/stop.png"));
+    private static final Image PAUSE_BUTTON_IMAGE = new Image(PlayerController.class.getResourceAsStream("/icons/pause.png"));
     private static final Image EXIT_BUTTON_IMAGE = new Image(PlayerController.class.getResourceAsStream("/icons/exit.png"));
     private static final Image CHOOSE_FILE_BUTTON_IMAGE = new Image(PlayerController.class.getResourceAsStream("/icons/folder.png"));
-
+    private Text subtitleText = new Text();
     private volatile boolean isPlaying;
     private double xOffset = 0;
     private double yOffset = 0;
-    private Queue<SubtitleFragment> fragments = new LinkedBlockingQueue<>();
-    private String filePath;
     private LocalTime currentTime = LocalTime.of(0, 0,0);
-    private LocalTime finisTime;
-
-    public String getFilePath() {
-        return filePath;
-    }
-
-    public void setFilePath(String filePath) {
-        this.filePath = filePath;
-    }
+    private String filePath;
+    //Binary Search
+    private List<SubtitleFragment> fragments = new ArrayList<>();
 
     @FXML
     private void initialize() {
-        currentTime.format(DateTimeFormatter.ISO_LOCAL_TIME);
         playAndStopButton.setGraphic(new ImageView(PLAY_BUTTON_IMAGE));
-        playAndStopButton.setMaxSize(16,16);
         chooseFileButton.setGraphic(new ImageView(CHOOSE_FILE_BUTTON_IMAGE));
-        chooseFileButton.setMaxSize(16,16);
         exitButton.setGraphic(new ImageView(EXIT_BUTTON_IMAGE));
-        exitButton.setMaxSize(16,16);
-        textLabel.setOnMousePressed(this::onLabelMousePressed);
-        textLabel.setOnMouseDragged(this::onLabelMouseDragged);
+        subtitleText.setFont(Font.font("Arial", 24));
+        textFlow.setTextAlignment(TextAlignment.CENTER);
+        textFlow.getChildren().add(subtitleText);
+        textFlow.setOnMousePressed(this::onLabelMousePressed);
+        textFlow.setOnMouseDragged(this::onLabelMouseDragged);
         exitButton.setOnAction(this::exit);
         playAndStopButton.setOnAction(this::playAndStopHandler);
         chooseFileButton.setOnAction(this::chooseFile);
+        slider.valueProperty().addListener(this::sliderChangeValueHandler);
         if (validate()) {
-            currentTime = LocalTime.of(0,0,0);
+            currentTime = LocalTime.MIN;
         }
+    }
+
+    private void sliderChangeValueHandler(Observable observable, Number oldValue, Number newValue) {
+        if (filePath == null || filePath.isEmpty()) {
+            return;
+        }
+        LocalTime newTime = LocalTime.of(0, newValue.intValue() / 60, newValue.intValue() % 60);
+        currentTime = newTime;
+        updateUI();
     }
 
     private void onLabelMouseDragged(MouseEvent mouseEvent) {
         Stage primaryStage = (Stage) exitButton.getScene().getWindow();
-        textLabel.setOnMouseDragged((MouseEvent event) -> {
+        textFlow.setOnMouseDragged((MouseEvent event) -> {
             primaryStage.setX(event.getScreenX() - xOffset);
             primaryStage.setY(event.getScreenY() - yOffset);
         });
     }
 
     private void onLabelMousePressed(MouseEvent mouseEvent) {
-        textLabel.setOnMousePressed((MouseEvent event) -> {
+        textFlow.setOnMousePressed((MouseEvent event) -> {
             xOffset = event.getSceneX();
             yOffset = event.getSceneY();
         });
@@ -99,7 +107,7 @@ public class PlayerController {
 
     private void chooseFile(ActionEvent actionEvent) {
         FileChooser fileChooser = new FileChooser();
-        fileChooser.setTitle("Выберите файл");
+        fileChooser.setTitle("Choose subtitle file (*.vtt)");
         fileChooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("Subtitle file (*vtt)", "*.vtt"));
         java.io.File selectedFile = fileChooser.showOpenDialog(chooseFileButton.getScene().getWindow());
         if (selectedFile != null) {
@@ -110,19 +118,18 @@ public class PlayerController {
 
     private void playAndStopHandler(ActionEvent actionEvent) {
         if (filePath == null || filePath.isEmpty()) {
-
+            subtitleText.setText("Choose file");
         } else {
             if (isPlaying) {
                 stop();
             } else {
-                new Thread(this::startPlaying).start();
+                new Thread(this::play).start();
             }
         }
     }
 
     private void exit(ActionEvent actionEvent) {
-        Stage currentStage = (Stage) exitButton.getScene().getWindow();
-        currentStage.close();
+        System.exit(0);
     }
 
     private void readFragments() {
@@ -135,46 +142,81 @@ public class PlayerController {
                 LocalTime finish = LocalTime.parse(matcher.group(2),
                         DateTimeFormatter.ISO_LOCAL_TIME);
                 fragments.add(new SubtitleFragment(start, finish, matcher.group(3)));
-                finisTime = finish;
             }
-            textLabel.setText(fragments.peek().text);
+            subtitleText.setText(fragments.get(0).getText());
+            LocalTime finisTime = fragments.get(fragments.size() - 1).getFinish();
             slider.setMax((finisTime.getMinute() * 60) + finisTime.getSecond());
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
     }
 
+    //validate subtitle file logic
     private boolean validate() {
         return true;
     }
 
-    private void startPlaying() {
-        if (currentTime.equals(finisTime)) {
-            currentTime = LocalTime.of(0,0,0);
-            isPlaying = false;
-            //change button image
-        }
-        while (!fragments.isEmpty()) {
-            SubtitleFragment currentFragment = fragments.poll();
-            Platform.runLater(() -> textLabel.setText(currentFragment.text));
-            while (currentTime.isBefore(currentFragment.finish)) {
-                try {
-                    Thread.sleep(1000);
-                    currentTime = currentTime.plusSeconds(1);
-                } catch (InterruptedException e) {
-                    throw new RuntimeException(e);
+    private void play() {
+        Platform.runLater(() -> playAndStopButton.setGraphic(new ImageView(PAUSE_BUTTON_IMAGE)));
+        isPlaying = true;
+        while (!currentTime.equals(fragments.get(fragments.size() - 1).getFinish()) && isPlaying) {
+            try {
+                if (currentTime.equals(fragments.get(fragments.size() - 1).getFinish())) {
+                    currentTime = LocalTime.MIN;
+                    slider.setValue(0);
+                    stop();
                 }
+                Thread.sleep(1000);
+                Platform.runLater(() -> slider.setValue((currentTime.getMinute() * 60) + currentTime.getSecond() + 1));
+            } catch (InterruptedException e) {
+                throw new RuntimeException(e);
             }
         }
     }
 
-    private void stop() {
+    private SubtitleFragment findFragmentByTime(LocalTime time) {
+        if (time.equals(LocalTime.MIN))
+            return fragments.get(0);
+        return fragmentsBinarySearch(time, 0, fragments.size() - 1);
     }
-    private static class SubtitleFragment implements Comparable<SubtitleFragment> {
 
-        LocalTime start;
-        LocalTime finish;
-        String text;
+    private SubtitleFragment fragmentsBinarySearch(LocalTime time, int first, int last) {
+        if (first > last) {
+            return null;
+        }
+        int mid = first + (last - first) / 2;
+        LocalTime middleFragmentStartTime = fragments.get(mid).getStart();
+        if (middleFragmentStartTime.equals(time)) {
+            return fragments.get(mid);
+        }
+        if (middleFragmentStartTime.isBefore(time) && fragments.get(mid).getFinish().isAfter(time)) {
+            return fragments.get(mid);
+        }
+        if (middleFragmentStartTime.isAfter(time)) {
+            return fragmentsBinarySearch(time, first, mid - 1);
+        }
+        if (middleFragmentStartTime.isBefore(time)){
+            return fragmentsBinarySearch(time, mid + 1, last);
+        }
+        return null;
+    }
+
+    private void updateUI() {
+        SubtitleFragment fragment = findFragmentByTime(currentTime);
+        timeLabel.setText(currentTime.toString());
+        if (fragment != null)
+            subtitleText.setText(fragment.getText());
+    }
+
+    private void stop() {
+        playAndStopButton.setGraphic(new ImageView(PLAY_BUTTON_IMAGE));
+        isPlaying = false;
+    }
+
+    public class SubtitleFragment implements Comparable<SubtitleFragment> {
+        private LocalTime start;
+        private LocalTime finish;
+        private String text;
 
         public SubtitleFragment(LocalTime start, LocalTime finish, String text) {
             this.start = start;
@@ -182,9 +224,34 @@ public class PlayerController {
             this.text = text;
         }
 
+        public LocalTime getStart() {
+            return start;
+        }
+
+        public void setStart(LocalTime start) {
+            this.start = start;
+        }
+
+        public LocalTime getFinish() {
+            return finish;
+        }
+
+        public void setFinish(LocalTime finish) {
+            this.finish = finish;
+        }
+
+        public String getText() {
+            return text;
+        }
+
+        public void setText(String text) {
+            this.text = text;
+        }
+
         @Override
         public int compareTo(SubtitleFragment o) {
-            return finish.compareTo(o.finish);
+            return getStart().compareTo(o.getStart());
         }
     }
+
 }
