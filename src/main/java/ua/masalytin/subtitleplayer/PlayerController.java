@@ -4,12 +4,18 @@ import javafx.application.Platform;
 import javafx.beans.Observable;
 import javafx.event.ActionEvent;
 import javafx.fxml.FXML;
+import javafx.geometry.Insets;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
 import javafx.scene.control.Slider;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
 import javafx.scene.input.MouseEvent;
+import javafx.scene.layout.AnchorPane;
+import javafx.scene.layout.Background;
+import javafx.scene.layout.BackgroundFill;
+import javafx.scene.layout.CornerRadii;
+import javafx.scene.paint.Color;
 import javafx.scene.text.Font;
 import javafx.scene.text.Text;
 import javafx.scene.text.TextAlignment;
@@ -31,6 +37,9 @@ import java.util.stream.Collectors;
 public class PlayerController {
 
     @FXML
+    private AnchorPane anchorPane;
+
+    @FXML
     private Button chooseFileButton;
 
     @FXML
@@ -38,6 +47,9 @@ public class PlayerController {
 
     @FXML
     private Button playAndStopButton;
+
+    @FXML
+    private Button changeThemeButton;
 
     @FXML
     private volatile Slider slider;
@@ -52,7 +64,10 @@ public class PlayerController {
     private static final Image PAUSE_BUTTON_IMAGE = new Image(PlayerController.class.getResourceAsStream("/icons/pause.png"));
     private static final Image EXIT_BUTTON_IMAGE = new Image(PlayerController.class.getResourceAsStream("/icons/exit.png"));
     private static final Image CHOOSE_FILE_BUTTON_IMAGE = new Image(PlayerController.class.getResourceAsStream("/icons/folder.png"));
+    private static final Image SUN_BUTTON_IMAGE = new Image(PlayerController.class.getResourceAsStream("/icons/sun.png"));
+    private static final Image MOON_BUTTON_IMAGE = new Image(PlayerController.class.getResourceAsStream("/icons/moon.png"));
     private Text subtitleText = new Text();
+    private Theme theme = Theme.WHITE;
     private volatile boolean isPlaying;
     private double xOffset = 0;
     private double yOffset = 0;
@@ -65,6 +80,7 @@ public class PlayerController {
         playAndStopButton.setGraphic(new ImageView(PLAY_BUTTON_IMAGE));
         chooseFileButton.setGraphic(new ImageView(CHOOSE_FILE_BUTTON_IMAGE));
         exitButton.setGraphic(new ImageView(EXIT_BUTTON_IMAGE));
+        changeThemeButton.setGraphic(new ImageView(MOON_BUTTON_IMAGE));
         subtitleText.setFont(Font.font("Arial", 24));
         textFlow.setTextAlignment(TextAlignment.CENTER);
         textFlow.getChildren().add(subtitleText);
@@ -73,7 +89,25 @@ public class PlayerController {
         exitButton.setOnAction(this::exit);
         playAndStopButton.setOnAction(this::playAndStopHandler);
         chooseFileButton.setOnAction(this::chooseFile);
+        changeThemeButton.setOnAction(this::changeTheme);
         slider.valueProperty().addListener(this::sliderChangeValueHandler);
+    }
+
+    private void changeTheme(ActionEvent actionEvent) {
+        switch (theme) {
+            case WHITE:
+                anchorPane.setBackground(new Background(new BackgroundFill(Color.BLACK, CornerRadii.EMPTY, Insets.EMPTY)));
+                subtitleText.setFill(Color.WHITE);
+                changeThemeButton.setGraphic(new ImageView(SUN_BUTTON_IMAGE));
+                theme = Theme.BLACK;
+                break;
+            case BLACK:
+                anchorPane.setBackground(new Background(new BackgroundFill(Color.WHITE, CornerRadii.EMPTY, Insets.EMPTY)));
+                subtitleText.setFill(Color.BLACK);
+                changeThemeButton.setGraphic(new ImageView(MOON_BUTTON_IMAGE));
+                theme = theme.WHITE;
+                break;
+        }
     }
 
     private void chooseFile(ActionEvent actionEvent) {
@@ -150,16 +184,19 @@ public class PlayerController {
     private void play() {
         Platform.runLater(() -> playAndStopButton.setGraphic(new ImageView(PAUSE_BUTTON_IMAGE)));
         isPlaying = true;
-        while (currentTime.isBefore(fragments.get(fragments.size() - 1).getFinish()) && isPlaying) {
+        while (isPlaying) {
+            if (currentTime.equals(fragments.get(fragments.size() - 1).getFinish())) {
+                Platform.runLater(() -> slider.setValue(0));
+                play();
+            }
             try {
                 Thread.sleep(1000);
-                Platform.runLater(() -> slider.setValue((currentTime.getMinute() * 60) + currentTime.getSecond() + 1));
+                if (isPlaying)
+                    Platform.runLater(() -> slider.setValue((currentTime.getMinute() * 60) + currentTime.getSecond() + 1));
             } catch (InterruptedException e) {
                 throw new RuntimeException(e);
             }
         }
-        Platform.runLater(() -> slider.setValue(0));
-        play();
     }
 
     private void stop() {
@@ -235,6 +272,11 @@ public class PlayerController {
         public void setText(String text) {
             this.text = text;
         }
+    }
+
+    enum Theme {
+        WHITE,
+        BLACK
     }
 
 }
