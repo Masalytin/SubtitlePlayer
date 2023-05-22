@@ -8,7 +8,7 @@
 
 <AnchorPane fx:id="anchorPane" prefHeight="129.0" prefWidth="900.0" style="-fx-background-color: white;" xmlns="http://javafx.com/javafx/19" xmlns:fx="http://javafx.com/fxml/1" fx:controller="ua.masalytin.subtitleplayer.PlayerController">
    <children>
-      <Slider fx:id="slider" layoutX="149.0" layoutY="105.0" prefHeight="14.0" prefWidth="719.0" />
+      <Slider fx:id="slider" layoutX="157.0" layoutY="105.0" prefHeight="14.0" prefWidth="711.0" />
       <Label fx:id="timeLabel" layoutX="107.0" layoutY="104.0" text="0:00:00" textAlignment="CENTER" />
       <Button fx:id="chooseFileButton" contentDisplay="CENTER" graphicTextGap="0.0" layoutX="42.0" layoutY="100.0" mnemonicParsing="false" prefHeight="16.0" prefWidth="16.0" style="-fx-background-color: transparent;" textAlignment="CENTER" />
       <Button fx:id="exitButton" contentDisplay="CENTER" layoutX="875.0" layoutY="100.0" mnemonicParsing="false" prefHeight="16.0" prefWidth="16.0" style="-fx-background-color: transparent;" />
